@@ -36,6 +36,8 @@ var (
 	configFile             string
 	configString           string
 	configBytes            []byte
+	xorConfigFile          string
+	xorKey                 string
 	externalUI             string
 	externalController     string
 	externalControllerUnix string
@@ -47,6 +49,8 @@ func init() {
 	flag.StringVar(&homeDir, "d", os.Getenv("CLASH_HOME_DIR"), "set configuration directory")
 	flag.StringVar(&configFile, "f", os.Getenv("CLASH_CONFIG_FILE"), "specify configuration file")
 	flag.StringVar(&configString, "config", os.Getenv("CLASH_CONFIG_STRING"), "specify base64-encoded configuration string")
+	flag.StringVar(&xorConfigFile, "xor-config", os.Getenv("CLASH_XOR_CONFIG_FILE"), "specify xor-encrypted configuration file")
+	flag.StringVar(&xorKey, "xor-key", os.Getenv("CLASH_XOR_KEY"), "specify xor decryption key")
 	flag.StringVar(&externalUI, "ext-ui", os.Getenv("CLASH_OVERRIDE_EXTERNAL_UI_DIR"), "override external ui directory")
 	flag.StringVar(&externalController, "ext-ctl", os.Getenv("CLASH_OVERRIDE_EXTERNAL_CONTROLLER"), "override external controller address")
 	flag.StringVar(&externalControllerUnix, "ext-ctl-unix", os.Getenv("CLASH_OVERRIDE_EXTERNAL_CONTROLLER_UNIX"), "override external controller unix address")
@@ -56,6 +60,29 @@ func init() {
 	flag.BoolVar(&version, "v", false, "show current version of mihomo")
 	flag.BoolVar(&testConfig, "t", false, "test configuration and exit")
 	flag.Parse()
+}
+
+// xorDecrypt 解密异或加密的base64字符串
+func xorDecrypt(encryptedData string, key string) ([]byte, error) {
+	// 解码base64
+	encryptedBytes, err := base64.StdEncoding.DecodeString(encryptedData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64: %v", err)
+	}
+
+	// 将密钥转换为字节数组
+	keyBytes := []byte(key)
+	if len(keyBytes) == 0 {
+		return nil, fmt.Errorf("xor key cannot be empty")
+	}
+
+	// 异或解密
+	decryptedBytes := make([]byte, len(encryptedBytes))
+	for i := 0; i < len(encryptedBytes); i++ {
+		decryptedBytes[i] = encryptedBytes[i] ^ keyBytes[i%len(keyBytes)]
+	}
+
+	return decryptedBytes, nil
 }
 
 func main() {
@@ -105,6 +132,37 @@ func main() {
 		if err != nil {
 			log.Fatalln("Initial configuration error: %s", err.Error())
 			return
+		}
+	} else if xorConfigFile != "" {
+		// 处理异或加密的配置文件
+		if xorKey == "" {
+			log.Fatalln("XOR key is required when using xor-config file")
+			return
+		}
+		
+		if !filepath.IsAbs(xorConfigFile) {
+			currentDir, _ := os.Getwd()
+			xorConfigFile = filepath.Join(currentDir, xorConfigFile)
+		}
+		
+		// 读取加密的配置文件
+		encryptedData, err := os.ReadFile(xorConfigFile)
+		if err != nil {
+			log.Fatalln("Failed to read xor config file: %s", err.Error())
+			return
+		}
+		
+		// 解密配置文件
+		configBytes, err = xorDecrypt(string(encryptedData), xorKey)
+		if err != nil {
+			log.Fatalln("Failed to decrypt xor config file: %s", err.Error())
+			return
+		}
+		
+		C.SetConfig(xorConfigFile)
+		
+		if err := config.Init(C.Path.HomeDir()); err != nil {
+			log.Fatalln("Initial configuration directory error: %s", err.Error())
 		}
 	} else if configFile == "-" {
 		var err error
