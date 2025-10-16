@@ -11,12 +11,12 @@ on:
       - "README.md"
       - ".github/ISSUE_TEMPLATE/**"
     branches:
-      - Alpha
+      - main
     tags:
       - "v*"
   pull_request:
     branches:
-      - Alpha
+      - main
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
@@ -383,7 +383,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: Meta
+          ref: main
           fetch-depth: '0'
           fetch-tags: 'true'
 
@@ -393,18 +393,18 @@ jobs:
           git fetch --tags
           echo "PREVERSION=$(git describe --tags --abbrev=0 HEAD)" >> $GITHUB_ENV
 
-      - name: Force push Alpha branch to Meta
+      - name: Force push main branch to main
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          git fetch origin Alpha:Alpha
-          git push origin Alpha:Meta --force
+          git fetch origin main:main
+          git push origin main:main --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag the commit on Alpha
+      - name: Tag the commit on main
         run: |
-          git checkout Alpha 
+          git checkout main 
           git tag ${{ github.event.inputs.version }}
           git push origin ${{ github.event.inputs.version }}
         env:
